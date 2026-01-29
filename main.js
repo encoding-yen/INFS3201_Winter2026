@@ -8,20 +8,20 @@ const fs = require('fs/promises')
 const prompt = require('prompt-sync')()
 
 /**
- * 
+ * Parses a number which the function opens and reads the content to be used.
  * 
  * @param {String} file Opens and reads the content of the given file.
  * @returns {Array} Returns the content read from the file and turns it into a JavaScript readable array.
  */
 async function readEmployeeData(file) {
     if (file == 1) {
-        let raw = await fs.readFile('test.json')
+        let raw = await fs.readFile('employees.json')
         return await JSON.parse(raw)
     } else if (file == 2) {
         let raw = await fs.readFile('shifts.json')
         return await JSON.parse(raw)
     } else if (file == 3) {
-        let raw = await fs.readFile('assignTest.json')
+        let raw = await fs.readFile('assignments.json')
         return await JSON.parse(raw)
     } else {
         console.log('There was no file passed to read.')
@@ -33,9 +33,9 @@ async function readEmployeeData(file) {
  * 
  * @param {Array} array[] takes the array and strigify it
  */
-async function writeEmployeeData(array) {
+async function writeEmployeeData(file, array) {
     let newArr = JSON.stringify(array, null, 2)
-    await fs.writeFile('assignTest.json', newArr)
+    await fs.writeFile(file, newArr)
 }
 
 /**
@@ -78,7 +78,7 @@ async function addEmployee(name, num) {
 
     let newObj = { "employeeId": newID, "name": name, "phone": num }
     empData.push(newObj)
-    await writeEmployeeData(empData)
+    await writeEmployeeData("employees.json", empData)
 }
 
 /**
@@ -92,19 +92,47 @@ async function assignShift(employee, shift) {
     let shiftData = await readEmployeeData(2)
     let assignData = await readEmployeeData(3)
 
-    for (e of empData){
-        if (e['employeeId'] == employee){
-            for (s of shiftData){
-                if (s['shiftId'] == shift){
-                    let newShift = { "employeeId": employee, "shiftId": shift}
-                    assignData.push(newShift)
-                    await writeEmployeeData(assignData)
-                }
-            }
-            console.log(`The shift ${shift} does not exist.`)
+    for (a of assignData){
+        if (a['shiftId'] == shift){
+            console.log(`===================================`)
+            console.log(`Employee already assigned to shift.`)
+            console.log(`===================================`)
         }
     }
-    console.log(`The employee ID ${employee} does not exist`)
+
+    empCheck = false
+    for (e of empData) {
+        if (e['employeeId'] == employee){
+            empCheck = true
+        }
+    }
+    
+    if (empCheck){
+        let emp = employee
+    } else {
+        console.log(`===================================`)
+        console.log(`Employee does not exist`)
+        console.log(`===================================`)
+    }
+
+    shiftCheck = false
+    for (s of shiftData) {
+        if (s['shiftId'] == shift){
+            shiftCheck = true
+        }
+    }
+
+    if (shiftCheck){
+        let sft = shift
+    } else {
+        console.log(`===================================`)
+        console.log(`Shift does not exist`)
+        console.log(`===================================`)
+    }
+
+    let newShift = { "employeeId": employee, "shiftId": shift}
+    assignData.push(newShift)
+    await writeEmployeeData("assignments.json", assignData)
 }
 
 /**
