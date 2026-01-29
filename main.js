@@ -3,7 +3,6 @@
  * 60306991
  */
 
-const { read } = require('fs')
 const fs = require('fs/promises')
 const prompt = require('prompt-sync')()
 
