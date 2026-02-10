@@ -5,6 +5,8 @@
  * Persistence Layer - Handles the file operations
  */
 
+const { checkPrime } = require('crypto')
+const { read } = require('fs')
 const fs = require('fs/promises')
 
 /**
@@ -15,13 +17,16 @@ const fs = require('fs/promises')
  */
 async function readEmployeeData(file) {
     if (file == 1) {
-        let raw = await fs.readFile('employees.json')
+        let raw = await fs.readFile('employees.json', 'utf8')
         return await JSON.parse(raw)
     } else if (file == 2) {
-        let raw = await fs.readFile('shifts.json')
+        let raw = await fs.readFile('shifts.json', 'utf8')
         return await JSON.parse(raw)
     } else if (file == 3) {
-        let raw = await fs.readFile('assignments.json')
+        let raw = await fs.readFile('assignments.json', 'utf8')
+        return await JSON.parse(raw)
+    } else if (file == 4){
+        let raw = await fs.readFile('config.json', 'utf8')
         return await JSON.parse(raw)
     } else {
         console.log('There was no file passed to read.')
@@ -41,21 +46,24 @@ async function writeEmployeeData(file, array) {
 /**
  * Displays all the employees from the .txt file
  * NO parameters are needed to parse.
+ * 
+ * @returns 
  */
 async function allEmployees() {
     let empData = await readEmployeeData(1)
+    let data = []
     if (empData.length === 0) {
-        console.log(`The file has no records.`)
+        data.push(`The file has no records.`)
     } else {
-        console.log(`=============================================`)
-        console.log(`Employee ID\tName\t\tPhone`)
-        console.log(`-----------\t-------------\t-------------`)
+        data.push(`=============================================`)
+        data.push(`Employee ID\tName\t\tPhone`)
+        data.push(`-----------\t-------------\t-------------`)
         for (c of empData) {
-
-            console.log(`${c.employeeId.padEnd(16)}${c.name.padEnd(20)}${c.phone}`)
+            data.push(`${c.employeeId.padEnd(16)}${c.name.padEnd(20)}${c.phone}`)
         }
-        console.log(`=============================================`)
+        data.push(`=============================================`)
     }
+    return data
 }
 
 /**
@@ -91,12 +99,13 @@ async function assignShift(employee, shift) {
     let empData = await readEmployeeData(1)
     let shiftData = await readEmployeeData(2)
     let assignData = await readEmployeeData(3)
+    let result = []
 
     for (a of assignData){
         if (a['shiftId'] == shift){
-            console.log(`===================================`)
-            console.log(`Employee already assigned to shift.`)
-            console.log(`===================================`)
+            result.push(`===================================`)
+            result.push(`Employee already assigned to shift.`)
+            result.push(`===================================`)
         }
     }
 
@@ -110,9 +119,9 @@ async function assignShift(employee, shift) {
     if (empCheck){
         let emp = employee
     } else {
-        console.log(`===================================`)
-        console.log(`Employee does not exist`)
-        console.log(`===================================`)
+        result.push(`===================================`)
+        result.push(`Employee does not exist`)
+        result.push(`===================================`)
     }
 
     shiftCheck = false
@@ -123,16 +132,28 @@ async function assignShift(employee, shift) {
     }
 
     if (shiftCheck){
-        let sft = shift
+        
+        let dailyHours = await checkLimit(employee, shift)
+
+        if (dailyHours === undefined){
+            return undefined
+        } else if (dailyHours){
+            let newShift = { "employeeId": employee, "shiftId": shift}
+            assignData.push(newShift)
+            await writeEmployeeData("assignments.json", assignData)
+        } else {
+            result.push(`=======================================================`)
+            result.push(`Employee already has the max amount of hours for today.`)
+            result.push(`=======================================================`)
+        }
+
     } else {
-        console.log(`===================================`)
-        console.log(`Shift does not exist`)
-        console.log(`===================================`)
+        result.push(`===================================`)
+        result.push(`Shift does not exist`)
+        result.push(`===================================`)
     }
 
-    let newShift = { "employeeId": employee, "shiftId": shift}
-    assignData.push(newShift)
-    await writeEmployeeData("assignments.json", assignData)
+    return result
 }
 
 /**
@@ -155,17 +176,95 @@ async function empSchedule(employee) {
             }
         }
     }
-    
-    if (schedule.length != 0){
-            console.log(`========================`)
-            console.log(`date, startTime, endTime`)
-            for (s of schedule){
-                console.log(s)
+    return schedule
+}
+
+/**
+ * Gets the employee hours for the given day
+ * 
+ * @param {String} empId Takes the empId as a string.
+ * @param {String} date Takes the date as a string.
+ * @returns {int} Returns the total hours of the employee for that day.
+ */
+async function getEmployeeHoursForDate(empId, date) {
+    let assignments = await readEmployeeData(3)
+    let totalHours = 0
+
+    for (let a of assignments) {
+        if (a.employeeId === empId) {
+            let shifts = await readEmployeeData(2)
+            for (let s of shifts) {
+                if (s.shiftId === a.shiftId && s.date === date) {
+                    let hours = await computeShiftDuration(s.startTime, s.endTime)
+                    totalHours += hours
+                }
             }
-            console.log(`========================`)
-    } else {
-        console.log(`=================================================`)
-        console.log(`The employee ID: ${employee} does not have a schedule.`)
-        console.log(`=================================================`)
+        }
     }
+
+    return totalHours
+}
+
+/**
+ * Checks the daily hours limit for an employee
+ * 
+ * @param {String} empId Takes the empId as a string.
+ * @param {String} sId Takes the shiftId as a string.
+ * @returns {boolean} Returns true, false or undefined.
+ */
+async function checkLimit(empId, sId) {
+    let shifts = await readEmployeeData(2)
+    let targetShift = undefined
+    
+    for (let s of shifts) {
+        if (s.shiftId === sId) {
+            targetShift = s
+        }
+    }
+    
+    if (targetShift === undefined) {
+        return undefined
+    }
+    
+    let config = await readEmployeeData(4)
+    let currHours = await getEmployeeHoursForDate(empId, targetShift.date)
+    let shiftDur = await computeShiftDuration(targetShift.startTime, targetShift.endTime)
+    
+    if (currHours + shiftDur > config.maxDailyHours) {
+        return false
+    }
+    return true
+}
+
+/**
+ * Computes the duration of a shift in hours.
+ * LLM: Claude
+ * Prompt: Write a JavaScript function that takes two time strings in HH:MM format and returns the duration in hours as a decimal number
+ * 
+ * @param {String} startTime Start time in HH:MM format
+ * @param {String} endTime End time in HH:MM format
+ * @returns {Number} Duration in hours as a decimal
+ */
+async function computeShiftDuration(startTime, endTime) {
+    let startParts = startTime.split(":")
+    let startHours = Number(startParts[0])
+    let startMinutes = Number(startParts[1])
+    
+    let endParts = endTime.split(":")
+    let endHours = Number(endParts[0])
+    let endMinutes = Number(endParts[1])
+    
+    let startTotalMinutes = startHours * 60 + startMinutes
+    let endTotalMinutes = endHours * 60 + endMinutes
+    
+    let durationMinutes = endTotalMinutes - startTotalMinutes
+    return durationMinutes / 60
+}
+
+module.exports = {
+    readEmployeeData,
+    allEmployees,
+    addEmployee,
+    assignShift,
+    empSchedule,
 }
