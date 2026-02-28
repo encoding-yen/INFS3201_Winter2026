@@ -16,7 +16,6 @@ async function addEmployee(name, num){
 }
 
 async function assignShift(employee, shift){
-    
     return await perst.assignShift(employee, shift)
 }
 

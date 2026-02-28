@@ -267,4 +267,7 @@ module.exports = {
     addEmployee,
     assignShift,
     empSchedule,
+    getEmployeeHoursForDate,
+    checkLimit,
+    computeShiftDuration
 }
