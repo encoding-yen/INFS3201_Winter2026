@@ -1,0 +1,90 @@
+Yyan Saguinsin - 60306991
+================================================================================
+
+This file contains the planned changes that will take place on the assignment 3
+files.
+
+================================================================================
+1. COLLECTIONS THAT WILL CHANGE
+================================================================================
+
+employees
+- Removes all instances of "employeeId" from all collection.
+- Uses the MongoDB "objectId" as the primary identifier.
+
+shifts
+- Removes all instances of "shiftId" from the collection.
+- Uses the MongoDB "_id" as the primary identifier.
+- A new attribute called "employee" will use an array of objectIds.
+
+assignments
+- This table will be removed, the data will be used as the attribute
+"employee" in the shifts table.
+
+users
+- New table to store valid users.
+
+security_logs
+- New table to store user activity logs.
+
+================================================================================
+2. PERSISTENCE FUNCTIONS THAT MUST CHANGE
+================================================================================
+
+allEmployees()
+- There is no meaningful changes that will take place here, except for the
+employeeId not being returned back.
+ 
+getOneEmployee(id)
+- This will use the new "objectId" as the queried attribute, uses
+{ _id: new mongo.ObjectId(id) }.
+ 
+empSchedule(employeeId)
+- Queries the old assignment table, will now use the shifts table.
+- The query format will be shifts.find({employee: {new mongo.ObjectId(id)}})
+ 
+editEmployee(empId, empName, empNum)
+- New query will use employees.find({_id: {new mongo.ObjectId(empId)}})
+ 
+NEW functions:
+- getOneShift(shiftId) - if needed for admin/shift management features.
+- loginUser(username, password) - checks users collection, returns user doc
+or null.
+- logAccess(entry) - inserts a record into security_logs.
+
+================================================================================
+3. BUSINESS LOGIC CHANGES
+================================================================================
+
+getOneEmployee, empSchedule, and editEmployee all accept an id parameter.
+The id parameter must be ObjectId compatible meaning the provided ids must be
+converted into a MongoDB objectId.
+
+A new function named authUser(username, password) will be used to check if the
+user details are valid. It will also use SHA256 to hash the passwords.
+
+================================================================================
+4. HOW EMBEDDED ARRAYS AFFECT UPDATE OPERATIONS
+================================================================================
+
+The embedded arrays would change the way the employee data would be queried.
+An exmple of this would be the query to update the employees array in the 
+shifts table. It would use { $addToSet: { employee: empObjectID } }
+
+================================================================================
+5. RISKS AND COMPLICATIONS
+================================================================================
+
+There are several risks that can occur with reformatting the tables and adding
+new functions.
+
+One risk is that during the migration process it could be disrupted and cause
+inconsistent data across the table. To prevent this, we can set up a backup
+table.
+
+Another risk is the ObjectId conversion. If we query using the previous id
+format ("E001"), mongo will return an empty array. We have to convert the id
+in the persistence layer before queriying the table.
+
+Since the assignment table will be removed we have to ensure that the data
+is transferred to the shifts table properly.
