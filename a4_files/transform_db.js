@@ -1,5 +1,4 @@
 const mongodb = require('mongodb');
-
 let client = undefined
 
 /**
@@ -47,19 +46,19 @@ async function addEmployeesToShifts(db){
 
     for (let i = 0; i < allAssign.length; i++){
 
-        let empId = await employee.findOne({ employeeId: assign.employeeId })
+        let empId = await employee.findOne({ employeeId: allAssign[i].employeeId })
         if (!empId){
-            console.log(`Employee ID: ${assign.employeeId} not found in employees collection.`)
+            console.log(`Employee ID: ${allAssign[i].employeeId} not found in employees collection.`)
             continue
         }
 
-        let shiftId = await shifts.findOne({ shiftId: assign.shiftId })
+        let shiftId = await shifts.findOne({ shiftId: allAssign[i].shiftId })
         if (!shiftId){
-            console.log(`Shift ID: ${assign.shiftId} not found in shifts collection.`)
+            console.log(`Shift ID: ${allAssign[i].shiftId} not found in shifts collection.`)
             continue
         }
 
-        await shifts.updateOne({ shiftId: assign.shiftId }, { $addToSet: { employees: assign.employeeId } })
+        await shifts.updateOne({ _id: shiftId._id }, { $addToSet: { employees: empId._id } })
     }
 }
 
