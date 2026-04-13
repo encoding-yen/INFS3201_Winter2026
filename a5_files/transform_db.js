@@ -9,9 +9,9 @@ let client = undefined
  * @returns {Promise<Array<Object>>} Provides the connection to the database.
  */
 async function readEmployeeData() {
-    client = new mongodb.MongoClient('mongodb+srv://readOnly:12class34@cluster0.xhwpjs2.mongodb.net/')
+    client = new mongodb.MongoClient('mongodb+srv://Yyan:infs3201@cluster0.zavk84u.mongodb.net/')
     await client.connect()
-    return client.db('infs3201_winter2026')
+    return client.db('infs_3203')
 }
 
 
