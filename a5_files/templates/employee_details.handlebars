@@ -1,0 +1,48 @@
+<h1>Employee Details</h1>
+<p><strong>Name:</strong> {{employee.name}}</p>
+<p><strong>Phone:</strong> {{employee.phone}}</p>
+<a href="/edit/{{employee._id}}">Edit Details</a>
+&nbsp;|&nbsp;
+<a href="/">Back to List</a>
+
+<h2>Shifts</h2>
+<table>
+    <tr><th>Date</th><th>Start Time</th><th>End Time</th></tr>
+    {{#if hasSchedule}}
+        {{#each schedule}}
+        <tr>
+            <td>{{this.date}}</td>
+            <td>{{this.startTime}}</td>
+            <td>{{this.endTime}}</td>
+        </tr>
+        {{/each}}
+    {{else}}
+        <tr><td colspan="3">No shifts scheduled.</td></tr>
+    {{/if}}
+</table>
+
+<h2>Employee Documents</h2>
+
+{{#if uploadError}}
+<p style="color:red">{{uploadError}}</p>
+{{/if}}
+
+<form method="POST" action="/employee/{{employee._id}}/upload" enctype="multipart/form-data">
+    <label for="employeeDocument">Upload PDF document:</label>
+    <input type="file" name="employeeDocument" id="employeeDocument" accept="application/pdf,.pdf">
+    <button type="submit">Upload</button>
+</form>
+
+{{#if hasDocuments}}
+    <h3>Uploaded Documents</h3>
+    <ul>
+        {{#each documents}}
+            <li>
+                {{this.originalName}} ({{this.size}} bytes)
+                <a href="/employee/{{../employee._id}}/document/{{this._id}}">Download</a>
+            </li>
+        {{/each}}
+    </ul>
+{{else}}
+    <p>No documents uploaded yet.</p>
+{{/if}}

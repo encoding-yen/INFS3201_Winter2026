@@ -1,0 +1,12 @@
+<h1>Two Factor Authentication</h1>
+
+{{#if message}}
+<p class="error">{{message}}</p>
+{{/if}}
+
+<form method="POST" action="/two-factor">
+    <label>Enter 6-digit code:<br><input type="text" name="code" maxlength="6"></label><br>
+    <button type="submit">Verify Code</button>
+</form>
+
+<p><a href="/login">Start over</a></p>
