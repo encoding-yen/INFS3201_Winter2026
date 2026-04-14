@@ -8,8 +8,13 @@
 const bsn = require('./business')
 const express = require('express')
 const { engine } = require('express-handlebars')
-const crypto = require('crypto')
+const cookieParser = require('cookie-parser')
 const app = express()
+
+const fileUpload = require('express-fileupload')
+const fs = require('fs')
+const path = require('path')
+app.use(cookieParser())
 
 // Handlebars setup
 app.engine('handlebars', engine({
@@ -21,17 +26,22 @@ app.set('view engine', 'handlebars')
 app.set('views', __dirname + '/templates')
 
 app.use(express.urlencoded({ extended: true }))
+app.use(fileUpload())
 
 // Session duration: 300 seconds (5 minutes)
-const duration = 300
+const duration = bsn.SESSION_DURATION_MS
 
-/**
- * Generates a random session token.
- * 
- * @returns {String} A random hex session token.
- */
-function generateToken() {
-    return crypto.randomBytes(32).toString('hex')
+// Token used to verify the user login attempts
+function getPendingToken(req) {
+    if (!req.cookies) {
+        return null
+    }
+
+    if (!req.cookies.pendingLoginToken) {
+        return null
+    }
+
+    return req.cookies.pendingLoginToken
 }
 
 /**
@@ -69,18 +79,21 @@ function getTokenFromCookie(req) {
 async function accessLogMiddleware(req, res, next) {
     let token = getTokenFromCookie(req)
     let username = null
+
     if (token) {
         let session = await bsn.getSession(token)
-        if (session && session.expiresAt > Date.now()) {
+        if (session && session.expiresAt.getTime() > Date.now()) {
             username = session.username
         }
-    await bsn.logAccess(username, req.url, req.method)
     }
+
+    await bsn.logAccess(username, req.url, req.method)
     next()
 }
 
 app.use(accessLogMiddleware)
 
+// Updated the authentication middleware to support 2FA and account lockout features
 /**
  * Authenticates the user based on the session token cookie.
  * 
@@ -91,82 +104,137 @@ app.use(accessLogMiddleware)
  * @returns {Promise<void>}
  */
 async function authenticate(req, res, next) {
-    if (req.path === '/login' || req.path === '/logout') {
+    if (req.path === '/login' || req.path === '/logout' || req.path === '/two-factor') {
         return next()
     }
 
     let token = getTokenFromCookie(req)
-    console.log('=== AUTH path:', req.path, 'token:', token ? token.slice(0,10)+'...' : 'none')
+
     if (!token) {
-        console.log('=== AUTH: no token, rendering login')
-        return res.render('login', { title: 'Login', message: 'Please log in to continue.' })
+        return res.render('login', {
+            title: 'Login',
+            message: 'Please log in to continue.',
+        })
     }
 
     let session = await bsn.getSession(token)
-    console.log('=== AUTH: session found:', session ? 'yes, expires:'+session.expiresAt+' now:'+Date.now() : 'no')
+
     if (!session) {
-        console.log('=== AUTH: no session, rendering login')
-        return res.render('login', { title: 'Login', message: 'Please log in to continue.' })
+        return res.render('login', {
+            title: 'Login',
+            message: 'Please log in to continue.',
+        })
     }
 
-    if (session.expiresAt <= Date.now()) {
-        console.log('=== AUTH: session expired')
+    if (session.expiresAt.getTime() <= Date.now()) {
         await bsn.deleteSession(token)
-        return res.render('login', { title: 'Login', message: 'Your session has expired. Please log in again.' })
+
+        return res.render('login', {
+            title: 'Login',
+            message: 'Your session has expired. Please log in again.',
+        })
     }
 
-    await bsn.updateSession(token, Date.now() + (duration * 1000))
+    await bsn.updateSession(token, Date.now() + duration)
     req.username = session.username
-    console.log('=== AUTH: passed, user:', session.username)
     next()
-
-    console.error('=== AUTH error:', err)
-    return res.render('login', { title: 'Login', message: 'An error occurred. Please log in again.' })
-    
 }
 
 app.use(authenticate)
 
 // Login and Logout routes
-app.get('/login', (req, res) => {
+// Login Routes have been updated to support 2FA and account lockout features
+app.get('/login', function (req, res) {
+    res.clearCookie('pendingLoginToken')
     res.render('login', {
         title: 'Login',
         message: null,
     })
 })
 
-app.post('/login', async (req, res) => {
+app.post('/login', async function (req, res) {
     let username = req.body.username.trim()
     let password = req.body.password
 
-    let user = await bsn.authenticateUser(username, password)
+    let result = await bsn.beginLogin(username, password)
 
-    if (!user) {
+    if (!result.success) {
         return res.render('login', {
             title: 'Login',
-            message: 'Invalid username or password.',
+            message: result.message,
         })
     }
 
-    let token = generateToken()
-    console.log('=== LOGIN: creating session, token:', token)
-    await bsn.createSession(token, user.username, Date.now() + (duration * 1000))
-    console.log('=== LOGIN: session created, setting cookie and redirecting')
-    res.cookie('sessionToken', token, { httpOnly: true, maxAge: duration * 1000 })
-    res.redirect('/')
+    res.cookie('pendingLoginToken', result.pendingToken, {
+        httpOnly: true,
+        maxAge: bsn.TWO_FACTOR_DURATION_MS,
+    })
+
+    return res.render('two_factor', {
+        title: 'Two Factor Authentication',
+        message: result.message,
+    })
 })
 
-app.get('/logout', async (req, res) => {
+app.get('/two-factor', function (req, res) {
+    let pendingToken = getPendingToken(req)
+
+    if (!pendingToken) {
+        return res.redirect('/login')
+    }
+
+    res.render('two_factor', {
+        title: 'Two Factor Authentication',
+        message: null,
+    })
+})
+
+app.post('/two-factor', async function (req, res) {
+    let pendingToken = getPendingToken(req)
+    let code = req.body.code.trim()
+
+    if (!pendingToken) {
+        return res.render('login', {
+            title: 'Login',
+            message: 'Please log in again.',
+        })
+    }
+
+    let result = await bsn.verifyTwoFactorLogin(pendingToken, code)
+
+    if (!result.success) {
+        return res.render('two_factor', {
+            title: 'Two Factor Authentication',
+            message: result.message,
+        })
+    }
+
+    res.clearCookie('pendingLoginToken')
+    res.cookie('sessionToken', result.sessionToken, {
+        httpOnly: true,
+        maxAge: duration,
+    })
+
+    return res.redirect('/')
+})
+
+// Updated logout route to clear both session and pending login tokens, and to support account lockout notifications
+app.get('/logout', async function (req, res) {
     let token = getTokenFromCookie(req)
+
     if (token) {
         await bsn.deleteSession(token)
     }
+
     res.clearCookie('sessionToken')
+    res.clearCookie('pendingLoginToken')
+
     res.render('login', {
         title: 'Login',
         message: 'You have been logged out.',
     })
 })
+// ============================================================
 
 // Protected application routes
 app.get('/', async (req, res) => {
@@ -178,10 +246,12 @@ app.get('/', async (req, res) => {
     })
 })
 
-app.get('/employee/:id', async (req, res) => {
+// Update employee route to include schedule and documents
+app.get('/employee/:id', async function (req, res) {
     let empId = req.params.id
     let employee = await bsn.getOneEmployee(empId)
     let schedule = await bsn.empSchedule(empId)
+    let documents = await bsn.getEmployeeDocuments(empId)
 
     res.render('employee_details', {
         title: 'Employee Details',
@@ -189,8 +259,93 @@ app.get('/employee/:id', async (req, res) => {
         employee: employee,
         schedule: schedule,
         hasSchedule: schedule !== undefined,
+        documents: documents,
+        hasDocuments: documents.length > 0,
+        uploadError: null,
     })
 })
+
+// Employee document upload route
+app.post('/employee/:id/upload', async function (req, res) {
+    let empId = req.params.id
+
+    if (!req.files || !req.files.employeeDocument) {
+        let employee = await bsn.getOneEmployee(empId)
+        let schedule = await bsn.empSchedule(empId)
+        let documents = await bsn.getEmployeeDocuments(empId)
+
+        return res.render('employee_details', {
+            title: 'Employee Details',
+            username: req.username,
+            employee: employee,
+            schedule: schedule,
+            hasSchedule: schedule !== undefined,
+            documents: documents,
+            hasDocuments: documents.length > 0,
+            uploadError: 'Please choose a PDF document to upload.',
+        })
+    }
+
+    let file = req.files.employeeDocument
+    let validation = await bsn.validateEmployeeDocumentUpload(empId, file)
+
+    if (!validation.success) {
+        let employee = await bsn.getOneEmployee(empId)
+        let schedule = await bsn.empSchedule(empId)
+        let documents = await bsn.getEmployeeDocuments(empId)
+
+        return res.render('employee_details', {
+            title: 'Employee Details',
+            username: req.username,
+            employee: employee,
+            schedule: schedule,
+            hasSchedule: schedule !== undefined,
+            documents: documents,
+            hasDocuments: documents.length > 0,
+            uploadError: validation.message,
+        })
+    }
+
+    let uploadPath = path.join(__dirname, 'uploads', 'employee_docs', empId)
+    fs.mkdirSync(uploadPath, { recursive: true })
+
+    let safeName = bsn.createSafeDocumentName(file.name)
+    let storedName = Date.now() + '-' + safeName
+    let fullPath = path.join(uploadPath, storedName)
+
+    await file.mv(fullPath)
+
+    await bsn.saveEmployeeDocumentMetadata(empId, {
+        originalName: file.name,
+        storedName: storedName,
+        mimeType: file.mimetype,
+        size: file.size,
+    })
+
+    return res.redirect('/employee/' + empId)
+})
+
+
+app.get('/employee/:id/document/:docId', async function (req, res) {
+    let empId = req.params.id
+    let docId = req.params.docId
+
+    let doc = await bsn.getEmployeeDocument(empId, docId)
+
+    if (!doc) {
+        return res.status(404).send('Document not found.')
+    }
+
+    let filePath = path.join(__dirname, 'uploads', 'employee_docs', empId, doc.storedName)
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('File missing.')
+    }
+
+    res.download(filePath, doc.originalName)
+})
+
+// ============================================================
 
 app.get('/edit/:id', async (req, res) => {
     let empId = req.params.id

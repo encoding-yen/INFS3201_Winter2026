@@ -21,7 +21,7 @@ async function readEmployeeData() {
     if (client) {
         return
     }
-    client = new mongodb.MongoClient('mongodb+srv://60306991_Yyan:infs3201@cluster0.xhwpjs2.mongodb.net/')
+    client = new mongodb.MongoClient('mongodb+srv://Yyan:infs3201@cluster0.zavk84u.mongodb.net/')
     await client.connect()
 }
 
@@ -33,7 +33,7 @@ async function readEmployeeData() {
  */
 async function allEmployees() {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let employees = db.collection('employees')
     let result = await employees.find().toArray()
     for (let i = 0; i < result.length; i++) {
@@ -51,7 +51,7 @@ async function allEmployees() {
  */
 async function getOneEmployee(id) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let employees = db.collection('employees')
     let empObjectId = new mongodb.ObjectId(id)
     let result = await employees.findOne({ _id: empObjectId })
@@ -72,7 +72,7 @@ async function getOneEmployee(id) {
  */
 async function empSchedule(employeeId) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let shifts = db.collection('shifts')
     let empObjectId = new mongodb.ObjectId(employeeId)
     let result = await shifts.find({ employees: empObjectId }).toArray()
@@ -94,7 +94,7 @@ async function empSchedule(employeeId) {
  */
 async function editEmployee(empId, empName, empNum) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let employees = db.collection('employees')
     let empObjectId = new mongodb.ObjectId(empId)
     await employees.updateOne(
@@ -112,7 +112,7 @@ async function editEmployee(empId, empName, empNum) {
  */
 async function createSession(token, username, expiresAt) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let sessions = db.collection('sessions')
     await sessions.insertOne({ token: token, username: username, expiresAt: new Date(expiresAt) })
 }
@@ -125,7 +125,7 @@ async function createSession(token, username, expiresAt) {
  */
 async function getSession(token) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let sessions = db.collection('sessions')
     return sessions.findOne({ token: token })
 }
@@ -138,7 +138,7 @@ async function getSession(token) {
  */
 async function updateSession(token, expiresAt) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let sessions = db.collection('sessions')
     await sessions.updateOne({ token: token }, { $set: { expiresAt: new Date(expiresAt) } })
 }
@@ -150,7 +150,7 @@ async function updateSession(token, expiresAt) {
  */
 async function deleteSession(token) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let sessions = db.collection('sessions')
     await sessions.deleteOne({ token: token })
 }
@@ -165,7 +165,7 @@ async function deleteSession(token) {
  */
 async function loginUser(username, password) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let users = db.collection('users')
     let hashed = crypto.createHash('sha256').update(password).digest('hex')
     return users.findOne({ username: username, password: hashed })
@@ -184,7 +184,7 @@ async function loginUser(username, password) {
  */
 async function logAccess(username, url, method) {
     await readEmployeeData()
-    let db = client.db('infs3201_winter2026')
+    let db = client.db('infs_3203')
     let log = db.collection('security_logs')
     await log.insertOne({
         timestamp: new Date(),
@@ -192,6 +192,191 @@ async function logAccess(username, url, method) {
         url: url,
         method: method,
     })
+}
+
+//=====================================================================
+// New functions specific for assignment 5
+//=====================================================================
+
+async function getUserByUsername(username) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let users = db.collection('users')
+
+    let user = await users.findOne({ username: username })
+
+    if (!user) {
+        return null
+    }
+
+    if (typeof user.failedLoginAttempts !== 'number') {
+        user.failedLoginAttempts = 0
+    }
+
+    if (typeof user.locked !== 'boolean') {
+        user.locked = false
+    }
+
+    return user
+}
+
+async function incrementFailedLoginAttempts(username) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let users = db.collection('users')
+
+    let user = await users.findOne({ username: username })
+    let attempts = 0
+
+    if (user && typeof user.failedLoginAttempts === 'number') {
+        attempts = user.failedLoginAttempts
+    }
+
+    attempts++
+
+    await users.updateOne(
+        { username: username },
+        { $set: { failedLoginAttempts: attempts } }
+    )
+
+    return attempts
+}
+
+async function resetFailedLoginAttempts(username) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let users = db.collection('users')
+
+    await users.updateOne(
+        { username: username },
+        { $set: { failedLoginAttempts: 0 } }
+    )
+}
+
+async function lockUserAccount(username) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let users = db.collection('users')
+
+    await users.updateOne(
+        { username: username },
+        { $set: { locked: true } }
+    )
+}
+
+async function createPendingLogin(pendingToken, username, code, expiresAt) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let pendingLogins = db.collection('pending_logins')
+
+    await pendingLogins.deleteMany({ username: username })
+
+    await pendingLogins.insertOne({
+        pendingToken: pendingToken,
+        username: username,
+        code: code,
+        expiresAt: new Date(expiresAt),
+    })
+}
+
+async function getPendingLogin(pendingToken) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let pendingLogins = db.collection('pending_logins')
+
+    return await pendingLogins.findOne({ pendingToken: pendingToken })
+}
+
+async function deletePendingLogin(pendingToken) {
+    await readEmployeeData()
+    let db = client.db('infs_3203')
+    let pendingLogins = db.collection('pending_logins')
+
+    await pendingLogins.deleteOne({ pendingToken: pendingToken })
+}
+
+
+/**
+ * Adds a new document for a given employee ID.
+ * 
+ * @param {*} empId 
+ * @param {*} doc 
+ */
+async function addEmployeeDocument(empId, doc) {
+    await readEmployeeData()
+
+    let db = client.db('infs_3203')
+    let employees = db.collection('employees')
+
+    await employees.updateOne(
+        { _id: new mongodb.ObjectId(empId) },
+        {
+            $push: {
+                documents: {
+                    _id: new mongodb.ObjectId(),
+                    originalName: doc.originalName,
+                    storedName: doc.storedName,
+                    mimeType: doc.mimeType,
+                    size: doc.size,
+                    uploadedAt: doc.uploadedAt,
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Returns all documents for a given employee ID.
+ * 
+ * @param {*} empId 
+ * @returns 
+ */
+async function getEmployeeDocuments(empId) {
+    await readEmployeeData()
+
+    let db = client.db('infs_3203')
+    let employees = db.collection('employees')
+    let employee = await employees.findOne({ _id: new mongodb.ObjectId(empId) })
+
+    if (!employee || !employee.documents) {
+        return []
+    }
+
+    let i = 0
+    for (i = 0; i < employee.documents.length; i++) {
+        employee.documents[i]._id = employee.documents[i]._id.toString()
+    }
+
+    return employee.documents
+}
+
+/**
+ * Returns a specific document for a given employee ID and document ID.
+ * 
+ * @param {*} empId 
+ * @param {*} docId 
+ * @returns 
+ */
+async function getEmployeeDocument(empId, docId) {
+    await readEmployeeData()
+
+    let db = client.db('infs_3203')
+    let employees = db.collection('employees')
+    let employee = await employees.findOne({ _id: new mongodb.ObjectId(empId) })
+
+    if (!employee || !employee.documents) {
+        return null
+    }
+
+    let i = 0
+    for (i = 0; i < employee.documents.length; i++) {
+        if (employee.documents[i]._id.toString() === docId) {
+            employee.documents[i]._id = employee.documents[i]._id.toString()
+            return employee.documents[i]
+        }
+    }
+
+    return null
 }
  
 module.exports = {
@@ -206,4 +391,14 @@ module.exports = {
     deleteSession,
     loginUser,
     logAccess,
+    getUserByUsername,
+    incrementFailedLoginAttempts,
+    resetFailedLoginAttempts,
+    lockUserAccount,
+    createPendingLogin,
+    getPendingLogin,
+    deletePendingLogin,
+    addEmployeeDocument,
+    getEmployeeDocuments,
+    getEmployeeDocument,
 }
