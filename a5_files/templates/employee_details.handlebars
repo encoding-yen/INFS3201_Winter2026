@@ -20,3 +20,29 @@
         <tr><td colspan="3">No shifts scheduled.</td></tr>
     {{/if}}
 </table>
+
+<h2>Employee Documents</h2>
+
+{{#if uploadError}}
+<p style="color:red">{{uploadError}}</p>
+{{/if}}
+
+<form method="POST" action="/employee/{{employee._id}}/upload" enctype="multipart/form-data">
+    <label for="employeeDocument">Upload PDF document:</label>
+    <input type="file" name="employeeDocument" id="employeeDocument" accept="application/pdf,.pdf">
+    <button type="submit">Upload</button>
+</form>
+
+{{#if hasDocuments}}
+    <h3>Uploaded Documents</h3>
+    <ul>
+        {{#each documents}}
+            <li>
+                {{this.originalName}} ({{this.size}} bytes)
+                <a href="/employee/{{../employee._id}}/document/{{this._id}}">Download</a>
+            </li>
+        {{/each}}
+    </ul>
+{{else}}
+    <p>No documents uploaded yet.</p>
+{{/if}}
