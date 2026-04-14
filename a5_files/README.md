@@ -1,11 +1,22 @@
-Usernames and Passwords from the users collection.
+Yyan Saguinsin
+60306991
 
-Account 1:
-Username - student1
-Password - infs
-Hashed Password - ead630a9381a3bd2981474d3b2a21f6547e5924cfe589b4606c0a0ce0c24427c
+I have created 2 accounts student1 and student2, student1 has been purposefully
+blocked to show the error in the login page. Use student2 to test the file
+upload feature. Both accounts can upload files. There is already a file
+upload for demonstration purposes.
 
-Account 2:
-Username - admin1
-Password - INFS
-Hashed Password - ec386aada7b0e4413349d7b533c19bea2697365960d73394e3219210c227c839
+===============================================================================
+Accounts:
+User       |     Password   |     Status
+student1   |     pass       |     Locked
+student2   |     infs       |     Open
+
+===============================================================================
+Main Changes:
+- Created the 2 Factor Authentication with an error message.
+- Created the file upload functions and features.
+- Updated MongoDB to include the new fields like pendingToken (for 2FA login).
+- Updated the the tiers to include 2FA and file upload
+- Moved some of the functions into different layers to follow the proper 
+3 tier architecture.
